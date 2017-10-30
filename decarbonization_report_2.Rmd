@@ -17,7 +17,7 @@ output:
 
 ```{r setup, include=FALSE, cache = FALSE}
 knitr::knit_hooks$set(inline = function(x) { knitr:::format_sci(x, 'md')})
-knitr::opts_chunk$set(cache = TRUE, echo = TRUE, fig.height=4, fig.width=7)
+knitr::opts_chunk$set(cache = FALSE, echo = TRUE, fig.height=4, fig.width=7)
 
 # This section loads necessary R libraries and sources scripts that define 
 # useful functions format_md.
