@@ -47,6 +47,10 @@ theme_set(theme_bw(base_size = 15))
 source('scripts/utils.R', chdir = T)
 ```
 # Top-Down Analysis of Decarbonization
+
+Start with a worked example to calculate top-down decarbonization for the world.
+
+# The World
 ```{r load_world_data}
 target_year = 2050
 reference_year = 2005
@@ -83,6 +87,9 @@ were still using this fuel mix.
 ```{r world_emissions_factor_table}
 kable(e_factors)
 ```
+
+
+## Top-Down Projection of Energy Demand and Emissions in `r target_year`
 
 First, let's calculate how many quads of energy of each fuel the world would
 be consuming in 2050:
@@ -126,6 +133,9 @@ kable(world_emissions_2050, digits = c(0, 1, 0, 1, 0),
       format.args = list("big.mark" = ","),
       col.names = c("Fuel", "%", "Quads", "MMT/Quad", "MMT CO2"))
 ```
+
+## Implied Emissions Reduction for `r target_year`
+
 ```{r calculate_world_emissions_reduction}
 
 # Add up all the emissions to get the total
