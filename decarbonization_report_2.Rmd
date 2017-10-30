@@ -1,0 +1,240 @@
+---
+title: 'put the title of your project here'
+author: "put your name here"
+date: "Due Oct. 30, 2017"
+bibliography: "decarbonization.bib" # this line tells RMarkdown which file to use for the bibliography
+nocite: |
+  @pielke_climate_fix_2010,
+  @pielke_evaluation_2011,
+  @pielke_british_2009,
+  @pielke_mamizu_2009
+output: 
+  html_document: default
+  pdf_document:
+    include:
+      in_header: "ees3310.sty" # This line just tells RMarkdown to use a style file to format the PDF file with Times Roman font.
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::knit_hooks$set(inline = function(x) { knitr:::format_sci(x, 'md')})
+knitr::opts_chunk$set(cache = TRUE, echo = TRUE, fig.height=4, fig.width=7)
+
+# This section loads necessary R libraries and sources scripts that define 
+# useful functions format_md.
+# 
+data_dir = "data"
+script_dir = "scripts"
+
+if (!dir.exists('data')) dir.create('data')
+
+library(pacman)
+
+# Some lab computers fail to load tidyverse
+# because bindr is not installed.
+# This will prevent such errors.
+if (!p_isinstalled(bindr)) p_install(bindr)
+
+
+# Load all of the following packages.
+# Install any missing packages.
+p_load(scales, tidyverse, stringr, janitor, knitr)
+p_load_gh("gilligan-ees-3310/kayadata")
+
+# This sets the default style for ggplot
+theme_set(theme_bw(base_size = 15))
+
+# Load basic utility scripts
+source('scripts/utils.R', chdir = T)
+```
+# Top-Down Analysis of Decarbonization
+```{r load_world_data}
+target_year = 2050
+reference_year = 2005
+start_year = 2016
+
+target_world_reduction = 0.36
+
+world_data = get_kaya_data("World")
+world_fuel_mix = get_fuel_mix("World") %>% arrange(fuel)
+world_projection = project_top_down("World", target_year)
+
+target_world_emissions = filter(world_data, year == reference_year)$F * (1 - target_world_reduction)
+projected_world_E = world_projection$E
+```
+The pathway for keeping warming below 2&deg;C implies a target of reducing 
+global CO~2~ emissions by `r format_md(100 * target_world_reduction, 0)`% 
+below the `r reference_year` level by `r target_year`, which would be
+`r format_md(target_world_emissions,1)`  million metric tons.
+Top-down projections predict that global energy demand will be 
+`r format_md(projected_world_E, 0)` quads in `r target_year`, so what does that imply for 
+ the need to install low-carbon energy?
+ 
+ The current energy mix is shown in the Figure below:
+ 
+```{r world_fuel_mix_figure, fig.width=7, fig.height=5}
+ e_factors = emissions_factors()
+ 
+ plot_fuel_mix(world_fuel_mix)
+ ```
+ 
+Let's calculate what the emissions in `r target_year` would be if the world 
+were still using this fuel mix.
+
+```{r world_emissions_factor_table}
+kable(e_factors)
+```
+
+First, let's calculate how many quads of energy of each fuel the world would
+be consuming in 2050:
+
+```{r world_fuel_mix_2050}
+world_fuel_mix_2050 = world_fuel_mix %>% 
+  select(fuel, pct) %>% # We only need to worry about the percentage of each fuel
+  mutate(quads = projected_world_E * pct / 100) # We multiply the total energy demand by 
+                                    # The percentage from each fuel to figure
+                                    # the number of quads of each fuel that
+                                    # the world would consume if the fuel
+                                    # mix stayed the same.
+  kable(world_fuel_mix_2050, digits = c(0,1,0))
+```
+
+Now, let's combine the emissions factors and the fuel mix into a single table:
+
+````{r world_emissions_tab, warning = FALSE}
+world_fuel_mix_2050 = world_fuel_mix_2050 %>% 
+  left_join(e_factors, by = "fuel")     # left_join combines two tables, taking all 
+                                        # rows from world_fuel, and combining the
+                                        # rows of e_factors by matching the column 
+                                        # "fuel" for the two tables. Because it's a 
+                                        # left join, it ignores any rows of e_factors 
+                                        # if the "fuel" doesn't have a matching row 
+                                        # in world_fuel_mix
+  
+  kable(world_fuel_mix_2050, digits = c(0, 0, 0, 0, 1))  
+```
+
+Now that we combined the tables, we can multiply the number of quads by the 
+emission factors to get the emissions from each fuel:
+
+```{r world_emissions_2050}
+# Multiply quads times emissions factor to get emissions
+world_emissions_2050 = world_fuel_mix_2050 %>%
+  mutate(emissions = quads * emission_factor)
+
+# Print a table 
+kable(world_emissions_2050, digits = c(0, 1, 0, 1, 0), 
+      format.args = list("big.mark" = ","),
+      col.names = c("Fuel", "%", "Quads", "MMT/Quad", "MMT CO2"))
+```
+```{r calculate_world_emissions_reduction}
+
+# Add up all the emissions to get the total
+total_world_emissions_2050 = sum(world_emissions_2050$emissions)
+
+# Emissions reduction necessary to meet target
+delta_world_emissions = total_world_emissions_2050 - target_world_emissions
+
+# Separate each fossil fuel to make calculations easier
+
+world_coal_2050 = filter(world_emissions_2050, fuel == "Coal")
+world_gas_2050 = filter(world_emissions_2050, fuel == "Natural Gas")
+world_oil_2050 = filter(world_emissions_2050, fuel == "Oil")
+
+# Reduction from eliminating both coal and gas
+
+world_coal_gas_reduction = world_coal_2050$emissions + world_gas_2050$emissions
+
+
+# What's left that we have to meet by reducing oil consumption
+world_remainder = delta_world_emissions - world_coal_gas_reduction
+
+oil_factor = filter(e_factors, fuel == "Oil")$emission_factor
+
+# Quads of oil we have to replace with renewables.
+delta_world_oil_quads = world_remainder / oil_factor
+
+# Total clean energy needs
+world_new_clean_energy = delta_world_oil_quads + world_coal_2050$quads +
+  world_gas_2050$quads
+```
+
+The total emissions in `r target_year` woulld be 
+`r format_md(total_world_emissions_2050, digits = 0, comma = TRUE, scientific = FALSE)` 
+million metric tons.
+We need to get this down to the target of 
+`r format_md(target_world_emissions, digits = 0, comma = TRUE, scientific = FALSE)`
+million metric tons. Thus, we have to replace 
+`r format_md(delta_world_emissions, digits = 0, comma = TRUE, scientific = FALSE)` 
+million metric tons
+of fossil-fuel emissions with renewable energy.
+
+We can start by eliminating coal, which will reduce emissions by 
+`r format_md(world_coal_2050$emissions, digits = 0, comma = TRUE, scientific = FALSE)`
+MMT. 
+Next, we can eliminate gas, which will reduce emissions by 
+`r format_md(world_gas_2050$emissions, digits = 0, comma = TRUE, scientific = FALSE)`
+
+(**Why do we eliminate gas next, when oil is responsible for much more emissions?**)
+
+This gives us total emissions reduction of 
+`r format_md(world_coal_gas_reduction, 0, comma = TRUE, scientific = FALSE)` MMT.
+That leaves 
+`r format_md(delta_world_emissions - world_coal_gas_reduction, 0, comma = TRUE, scientific = FALSE)`
+MMT to be eliminated by reducing oil consumption.
+
+Eliminating coal requires 
+`r round(world_coal_2050$quads)` 
+quads of clean energy to replace coal, 
+eliminating gas requires
+`r round(world_gas_2050$quads)` 
+quads of clean energy to replace natural gas,
+and finally, we must replace 
+`r round(delta_world_oil_quads)` 
+quads of oil with clean energy. 
+This adds up to 
+`r round(world_new_clean_energy)`
+quads of new clean energy.
+
+
+## Clean power requirements
+
+If we want to provide this `r round(world_new_clean_energy)` quads per year
+of clean 
+energy using nuclear power, we need to figure out how many nuclear power
+plants it takes to produce a quad per year.
+
+Power plants have a "nameplate capacity", which indicates the power they
+would produce if they ran full out 24/7. In fact, power plants can't do this
+because they need down time for maintenance and solar and wind are also subject
+to the fact that the sun does not shine all the time, nor does the wind blow
+at its full strength all the time.
+
+We represent the down-time by a "capacity factor," so the actual average power
+a plant produces during a year is the product 
+$$\text{average power} = \text{nameplate capacity} \times \text{capacity factor}$$
+The following table shows the power output from different kinds of power plants.
+
+```{r power plant capacity}
+capacity = generation_capacity()
+# Capacity has columns for:
+# nameplate_capacity, which is the power the plant would produce if it ran
+
+capacity = capacity %>%
+  mutate(average_power = nameplate_capacity * capacity_factor)
+
+kable(capacity)
+```
+
+Let's convert this to quads:
+
+```{r power plant capacity_quads}
+capacity = capacity %>% select(fuel, description, average_power) %>%
+  mutate(quads = average_power / megawatts_per_quad(),
+         plants_per_quad = 1 / quads)
+
+kable(capacity, digits = c(0,0,2,5,1))
+```
+
+Now we are ready to calculate the number of power plants we have to construct between now and `r target_year`.
+
+# References

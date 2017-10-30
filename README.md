@@ -1,2 +1,2 @@
-# decarbonization-lab-part-2
+# lab_decarbonization_2
 Top-down analysis of implied decarbonization.
